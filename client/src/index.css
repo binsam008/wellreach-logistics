@@ -1,0 +1,235 @@
+/* stylelint-disable at-rule-no-unknown */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth feel everywhere */
+* {
+  transition: all 0.18s ease-out;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Base styles */
+@layer base {
+  body {
+    background-image: linear-gradient(to bottom right, #f8fafc, #ffffff, #f1f5f9);
+    color: #0f172a; /* text-slate-900 */
+  }
+
+  html.dark body {
+    background-image: linear-gradient(to bottom right, #0f172a, #111827, #0f172a);
+    color: #ffffff; /* dark:text-slate-100 */
+  }
+}
+
+/* Components */
+@layer components {
+  .app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-container {
+    @apply max-w-6xl mx-auto w-full px-4 md:px-6 lg:px-8;
+  }
+
+  .card {
+    @apply bg-white dark:bg-slate-900/90 backdrop-blur
+      border border-slate-200/70 dark:border-slate-800
+      rounded-2xl shadow-lg;
+  }
+
+  .card-inner {
+    @apply p-6 md:p-7;
+  }
+
+  .input {
+    @apply w-full px-3.5 py-2.5 rounded-xl
+      bg-slate-100 dark:bg-slate-900
+      border border-slate-200 dark:border-slate-800
+      text-slate-900 dark:text-slate-100
+      placeholder:text-slate-400 dark:placeholder:text-slate-500
+      focus:outline-none focus:ring-2 focus:ring-orange-400/80
+      dark:focus:ring-purple-500/80;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2
+      px-4 py-2.5 rounded-xl font-medium
+      shadow-md hover:shadow-lg
+      text-sm md:text-[15px]
+      focus:outline-none focus:ring-2 focus:ring-offset-2
+      focus:ring-orange-400/80 dark:focus:ring-purple-500/80
+      disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+
+  /* Button color variants */
+  .btn-primary {
+    background-color: #fb923c; /* light brand orange */
+    color: #ffffff;
+  }
+
+  .btn-primary:hover {
+    background-color: #f97316; /* orange-500 */
+  }
+
+  html.dark .btn-primary {
+    background-color: #7c3aed; /* dark brand purple */
+  }
+
+  html.dark .btn-primary:hover {
+    background-color: #6d28d9; /* purple-700 */
+  }
+
+  .btn-outline {
+    border: 1px solid rgba(203, 213, 225, 1); /* border-slate-300 */
+    background-color: transparent;
+    color: rgb(17, 24, 39); /* text-slate-900 */
+  }
+
+  html.dark .btn-outline {
+    border-color: rgb(55, 65, 81); /* dark:border-slate-700 */
+    color: rgb(243, 244, 246); /* dark:text-slate-100 */
+  }
+
+  .btn-outline:hover {
+    background-color: rgba(241, 245, 249, 0.8); /* hover:bg-slate-100/80 */
+  }
+
+  html.dark .btn-outline:hover {
+    background-color: rgba(30, 41, 59, 0.8); /* dark:hover:bg-slate-800/80 */
+  }
+
+  .btn-ghost {
+    color: #475569;
+  }
+
+  html.dark .btn-ghost {
+    color: #cbd5e1;
+  }
+
+  .btn-ghost:hover {
+    background-color: rgba(241, 245, 249, 0.7);
+  }
+
+  html.dark .btn-ghost:hover {
+    background-color: rgba(30, 41, 59, 0.7);
+  }
+
+  .btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.12);
+  }
+
+  html.dark .btn:focus {
+    box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.12);
+  }
+
+  /* Section titles & subtitles */
+  .section-title {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: #0f172a;
+  }
+
+  html.dark .section-title {
+    color: #ffffff;
+  }
+
+  @media (min-width: 768px) {
+    .section-title {
+      font-size: 2.25rem;
+      line-height: 2.5rem;
+    }
+  }
+
+  .section-subtitle {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: #6b7280;
+  }
+
+  html.dark .section-subtitle {
+    color: #9ca3af;
+  }
+
+  @media (min-width: 768px) {
+    .section-subtitle {
+      font-size: 15px;
+    }
+  }
+
+  /* Pills / badges */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    background-color: #f1f5f9;
+    color: #374151;
+  }
+
+  html.dark .pill {
+    background-color: #0f172a;
+    color: #e5e7eb;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .status-completed {
+    background-color: #d1fae5;
+    color: #047857;
+  }
+
+  html.dark .status-completed {
+    background-color: rgba(6, 78, 59, 0.4);
+    color: #a7f3d0;
+  }
+
+  .status-draft {
+    background-color: #f1f5f9;
+    color: #374151;
+  }
+
+  html.dark .status-draft {
+    background-color: #0f172a;
+    color: #e5e7eb;
+  }
+
+  .status-billed {
+    background-color: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  html.dark .status-billed {
+    background-color: rgba(30, 58, 138, 0.4);
+    color: #bfdbfe;
+  }
+}
+
+/* Utilities */
+@layer utilities {
+  .glass {
+    background-color: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+  }
+
+  html.dark .glass {
+    background-color: rgba(15, 23, 42, 0.8);
+  }
+}
