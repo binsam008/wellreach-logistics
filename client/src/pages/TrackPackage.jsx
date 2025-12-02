@@ -83,8 +83,8 @@ export default function TrackPackage() {
                       <p><span className="font-semibold">Route:</span> {result.route}</p>
                       <p><span className="font-semibold">Driver:</span> {result.driver}</p>
                       <p><span className="font-semibold">Truck:</span> {result.truck}</p>
-                      <p><span className="font-semibold">Cost:</span> ₹{result.cost}</p>
-                      <p><span className="font-semibold">Sale:</span> ₹{result.sale}</p>
+                      {/* <p><span className="font-semibold">Cost:</span> ₹{result.cost}</p>
+                      <p><span className="font-semibold">Sale:</span> ₹{result.sale}</p> */}
                       {result.createdAt && (
                         <p>
                           <span className="font-semibold">Created:</span>{" "}

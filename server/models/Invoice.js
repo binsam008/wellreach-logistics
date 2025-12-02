@@ -1,39 +1,40 @@
 // server/models/Invoice.js
 const mongoose = require("mongoose");
 
+const extraCostSchema = new mongoose.Schema(
+  {
+    label: { type: String, default: "" },
+    amount: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const invoiceSchema = new mongoose.Schema(
   {
     invoiceNumber: { type: String, required: true, unique: true },
 
-    // linked job
     job: { type: mongoose.Schema.Types.ObjectId, ref: "Job", required: true },
 
-    // client info
-    clientName: String,
-    clientAddress: String,
-    clientGst: String,
-    clientMobile: String,
+    clientName: { type: String, default: "" },
+    clientAddress: { type: String, default: "" },
+    clientGst: { type: String, default: "" },
+    clientMobile: { type: String, default: "" },
 
-    // money fields
     baseCost: { type: Number, default: 0 },
-    extraCosts: [
-      {
-        label: String,
-        amount: Number,
-      },
-    ],
+    extraCosts: { type: [extraCostSchema], default: [] },
     discount: { type: Number, default: 0 },
 
-    finalCost: { type: Number, default: 0 }, // internal total cost
-    finalSale: { type: Number, default: 0 }, // total billed to client
+    finalCost: { type: Number, default: 0 },
+    finalSale: { type: Number, default: 0 },
 
-    // payments
+    taxPercent: { type: Number, default: 0 },
+
     currency: { type: String, default: "BHD" },
-    paidAmount: { type: Number, default: 0 }, // how much client has paid
+    paidAmount: { type: Number, default: 0 },
 
-    status: { type: String, default: "billed" }, // billed / draft / unbilled
-    notes: String,
-    terms: String,
+    status: { type: String, default: "billed" },
+    notes: { type: String, default: "" },
+    terms: { type: String, default: "" },
   },
   { timestamps: true }
 );

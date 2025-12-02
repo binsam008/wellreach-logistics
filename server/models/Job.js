@@ -7,7 +7,8 @@ const jobSchema = new mongoose.Schema(
     truckDetails: String,
     driverName: String,
     routeTo: String,
-    cost: { type: Number, default: 0 },
+    country: String, // added country
+    cost: { type: Number, default: 0 }, // base/truck cost
     sale: { type: Number, default: 0 },
     clientName: String,
     status: { type: String, default: "open" }, // open / completed

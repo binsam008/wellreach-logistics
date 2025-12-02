@@ -1,8 +1,11 @@
+// client/src/pages/JobForm.jsx
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api";
 import { Truck, Save } from "lucide-react";
 import ShipmentStatusSelect from "../components/ShipmentStatusSelect";
+
+const COUNTRIES = ["Select country", "Bahrain", "India", "UAE", "Other"];
 
 export default function JobForm() {
   const nav = useNavigate();
@@ -17,13 +20,13 @@ export default function JobForm() {
     truckDetails: "",
     driverName: "",
     routeTo: "",
+    country: "Bahrain",
     cost: "",
     sale: "",
     clientName: "",
     status: "DOCUMENT RECEIVED",
   });
 
-  // Load existing job if in edit mode
   useEffect(() => {
     if (!isEdit) return;
 
@@ -38,6 +41,7 @@ export default function JobForm() {
           truckDetails: j.truckDetails || "",
           driverName: j.driverName || "",
           routeTo: j.routeTo || "",
+          country: j.country || "Bahrain",
           cost: j.cost != null ? String(j.cost) : "",
           sale: j.sale != null ? String(j.sale) : "",
           clientName: j.clientName || "",
@@ -101,148 +105,73 @@ export default function JobForm() {
             <Truck className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-base md:text-lg font-semibold">
-              {isEdit ? "Edit Transport Job" : "New Transport Job"}
-            </h3>
+            <h3 className="text-base md:text-lg font-semibold">{isEdit ? "Edit Transport Job" : "New Transport Job"}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {isEdit
-                ? "Update job, vehicle, driver, route and costing details."
-                : "Enter job, vehicle, driver, route and costing details."}
+              {isEdit ? "Update job, vehicle, driver, route and costing details." : "Enter job, vehicle, driver, route and costing details."}
             </p>
           </div>
         </div>
 
         {loadingJob ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Loading job details…
-          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading job details…</p>
         ) : (
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="grid md:grid-cols-2 gap-4">
-              {/* Job Number */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Job Number / Tracking ID
-                </label>
-                <input
-                  className="input"
-                  name="jobNumber"
-                  value={form.jobNumber}
-                  onChange={handleChange}
-                />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Job Number / Tracking ID</label>
+                <input className="input" name="jobNumber" value={form.jobNumber} onChange={handleChange} />
               </div>
 
-              {/* Client Name */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Client Name
-                </label>
-                <input
-                  className="input"
-                  name="clientName"
-                  value={form.clientName}
-                  onChange={handleChange}
-                />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Client Name</label>
+                <input className="input" name="clientName" value={form.clientName} onChange={handleChange} />
               </div>
 
-              {/* Truck Details */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Truck Details
-                </label>
-                <input
-                  className="input"
-                  name="truckDetails"
-                  value={form.truckDetails}
-                  onChange={handleChange}
-                />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Truck Details</label>
+                <input className="input" name="truckDetails" value={form.truckDetails} onChange={handleChange} />
               </div>
 
-              {/* Driver Name */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Driver Name
-                </label>
-                <input
-                  className="input"
-                  name="driverName"
-                  value={form.driverName}
-                  onChange={handleChange}
-                />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Driver Name</label>
+                <input className="input" name="driverName" value={form.driverName} onChange={handleChange} />
               </div>
 
-              {/* Route */}
               <div className="space-y-1 md:col-span-2">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Route To
-                </label>
-                <input
-                  className="input"
-                  name="routeTo"
-                  value={form.routeTo}
-                  onChange={handleChange}
-                />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Route To</label>
+                <input className="input" name="routeTo" value={form.routeTo} onChange={handleChange} />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Country</label>
+                <select className="input" name="country" value={form.country} onChange={handleChange}>
+                  {COUNTRIES.map((c) => <option key={c} value={c === "Select country" ? "" : c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Shipment Status</label>
+                <ShipmentStatusSelect value={form.status} onChange={(status) => setForm((f) => ({ ...f, status }))} />
               </div>
             </div>
 
-            {/* Shipment Status */}
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                Shipment Status
-              </label>
-              <ShipmentStatusSelect
-                value={form.status}
-                onChange={(status) => setForm((f) => ({ ...f, status }))}
-              />
-            </div>
-
-            {/* Cost & Sale */}
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Truck Cost (₹)
-                </label>
-                <input
-                  type="number"
-                  className="input"
-                  name="cost"
-                  value={form.cost}
-                  onChange={handleChange}
-                />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Truck Cost (₹)</label>
+                <input type="number" className="input" name="cost" value={form.cost} onChange={handleChange} />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Sale Cost (₹)
-                </label>
-                <input
-                  type="number"
-                  className="input"
-                  name="sale"
-                  value={form.sale}
-                  onChange={handleChange}
-                />
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Sale Cost (₹)</label>
+                <input type="number" className="input" name="sale" value={form.sale} onChange={handleChange} />
               </div>
             </div>
 
-            {/* Buttons */}
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => nav("/admin/dashboard/jobs")}
-              >
-                Cancel
-              </button>
+              <button type="button" className="btn btn-outline" onClick={() => nav("/admin/dashboard/jobs")}>Cancel</button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
                 <Save className="w-4 h-4" />
-                {saving
-                  ? isEdit
-                    ? "Saving..."
-                    : "Saving..."
-                  : isEdit
-                  ? "Update Job"
-                  : "Save Job"}
+                {saving ? (isEdit ? "Saving..." : "Saving...") : (isEdit ? "Update Job" : "Save Job")}
               </button>
             </div>
           </form>
