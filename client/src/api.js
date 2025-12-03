@@ -1,7 +1,7 @@
 // client/src/api.js
 import axios from "axios";
 
-// Use Vercel env when deployed, fallback to localhost for development
+// Use env when deployed, fallback to localhost during development
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || "http://localhost:5000/api",
 });
@@ -15,7 +15,7 @@ export const setToken = (token) => {
   }
 };
 
-// Restore token on refresh
+// Restore token on page refresh
 const saved = localStorage.getItem("token");
 if (saved) setToken(saved);
 
