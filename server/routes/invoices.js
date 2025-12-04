@@ -3,7 +3,7 @@ const express = require("express");
 const Invoice = require("../models/Invoice");
 const Job = require("../models/Job");
 const auth = require("../middleware/auth");
-const generateInvoiceDoc = require("../utils/invoicePdf");
+const { streamInvoicePDF } = require("../utils/invoicePdf");
 
 const router = express.Router();
 
@@ -30,7 +30,8 @@ function buildSummary(inv) {
   const taxAmount = Math.round((taxable * (taxPercent / 100)) * 1000) / 1000;
   const computedFinalSale = Number((taxable + taxAmount).toFixed(3));
 
-  const total = inv.finalSale != null ? Number(inv.finalSale) : computedFinalSale;
+  const total =
+    inv.finalSale != null ? Number(inv.finalSale) : computedFinalSale;
   const paid = Number(inv.paidAmount || 0);
   const balance = Number((total - paid).toFixed(3));
 
@@ -40,7 +41,10 @@ function buildSummary(inv) {
     jobNumber: job?.jobNumber,
     clientName: inv.clientName,
     status: inv.status,
-    currency: inv.currency || (job?.country && deriveTaxAndCurrencyFromCountry(job.country).currency) || "BHD",
+    currency:
+      inv.currency ||
+      (job?.country && deriveTaxAndCurrencyFromCountry(job.country).currency) ||
+      "BHD",
     total,
     paidAmount: paid,
     balance,
@@ -49,6 +53,8 @@ function buildSummary(inv) {
     createdAt: inv.createdAt,
   };
 }
+
+// ================= LIST / GET =================
 
 // GET /api/invoices  (protected) – list invoices for Billing panel
 router.get("/", auth, async (req, res) => {
@@ -74,6 +80,8 @@ router.get("/:id/full", auth, async (req, res) => {
   }
 });
 
+// ================= CREATE FROM JOB =================
+
 // POST /api/invoices/from-job/:jobId  (protected) – create invoice from job
 router.post("/from-job/:jobId", auth, async (req, res) => {
   try {
@@ -81,7 +89,9 @@ router.post("/from-job/:jobId", auth, async (req, res) => {
     if (!job) return res.status(404).json({ error: "Job not found" });
 
     const count = await Invoice.countDocuments();
-    const invoiceNumber = `WR-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
+    const invoiceNumber = `WR-${new Date().getFullYear()}-${String(
+      count + 1
+    ).padStart(4, "0")}`;
 
     // Standard extra cost rows (pre-populated)
     const standardExtras = [
@@ -92,7 +102,9 @@ router.post("/from-job/:jobId", auth, async (req, res) => {
     ];
 
     // choose defaults based on job country
-    const { taxPercent, currency } = deriveTaxAndCurrencyFromCountry(job.country || "");
+    const { taxPercent, currency } = deriveTaxAndCurrencyFromCountry(
+      job.country || ""
+    );
 
     const invoice = await Invoice.create({
       invoiceNumber,
@@ -113,10 +125,12 @@ router.post("/from-job/:jobId", auth, async (req, res) => {
 
     res.status(201).json(invoice);
   } catch (err) {
-    console.error("Create invoice from job error:", err);
+    console.error("Create invoice from job error:", err.message, err.stack);
     res.status(500).json({ error: "Failed to create invoice" });
   }
 });
+
+// ================= PAYMENTS =================
 
 // PUT /api/invoices/:id/pay  (protected) – record a payment
 router.put("/:id/pay", auth, async (req, res) => {
@@ -124,20 +138,26 @@ router.put("/:id/pay", auth, async (req, res) => {
     const { amount } = req.body;
     const parsed = Number(amount);
     if (!parsed || parsed <= 0) {
-      return res.status(400).json({ error: "Payment amount must be a positive number" });
+      return res
+        .status(400)
+        .json({ error: "Payment amount must be a positive number" });
     }
 
     const invoice = await Invoice.findById(req.params.id).populate("job");
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
 
-    const extrasSum = (invoice.extraCosts || []).reduce((s, e) => s + Number(e?.amount || 0), 0);
+    const extrasSum = (invoice.extraCosts || []).reduce(
+      (s, e) => s + Number(e?.amount || 0),
+      0
+    );
     const base = Number(invoice.baseCost ?? invoice.job?.cost ?? 0);
     const discount = Number(invoice.discount || 0);
     const taxPercent = Number(invoice.taxPercent || 0);
 
     const subtotal = base + extrasSum;
     const taxable = Math.max(0, subtotal - discount);
-    const taxAmount = Math.round((taxable * (taxPercent / 100)) * 1000) / 1000;
+    const taxAmount =
+      Math.round((taxable * (taxPercent / 100)) * 1000) / 1000;
     const computedTotal = Number((taxable + taxAmount).toFixed(3));
 
     let newPaid = Number(invoice.paidAmount || 0) + parsed;
@@ -155,13 +175,17 @@ router.put("/:id/pay", auth, async (req, res) => {
   }
 });
 
+// ================= EXTRA COSTS / DISCOUNT =================
+
 // PUT /api/invoices/:id/extra-costs (protected) – update extraCosts, discount, taxPercent
 router.put("/:id/extra-costs", auth, async (req, res) => {
   try {
     const { extraCosts, discount, taxPercent, finalSale, country } = req.body;
 
     if (!Array.isArray(extraCosts)) {
-      return res.status(400).json({ error: "extraCosts must be an array" });
+      return res
+        .status(400)
+        .json({ error: "extraCosts must be an array" });
     }
 
     const invoice = await Invoice.findById(req.params.id).populate("job");
@@ -177,16 +201,23 @@ router.put("/:id/extra-costs", auth, async (req, res) => {
     invoice.taxPercent = Number(taxPercent || invoice.taxPercent || 0);
     if (country) invoice.country = country;
 
-    const extrasSum = normalized.reduce((s, e) => s + Number(e.amount || 0), 0);
+    const extrasSum = normalized.reduce(
+      (s, e) => s + Number(e.amount || 0),
+      0
+    );
     const base = Number(invoice.baseCost || invoice.job?.cost || 0);
     const subtotal = Number((base + extrasSum).toFixed(3));
     invoice.finalCost = subtotal;
 
     const taxable = Math.max(0, subtotal - Number(invoice.discount || 0));
-    const taxAmount = Math.round((taxable * (Number(invoice.taxPercent || 0) / 100)) * 1000) / 1000;
+    const taxAmount =
+      Math.round(
+        (taxable * (Number(invoice.taxPercent || 0) / 100)) * 1000
+      ) / 1000;
     const computedFinalSale = Number((taxable + taxAmount).toFixed(3));
 
-    invoice.finalSale = finalSale != null ? Number(finalSale) : computedFinalSale;
+    invoice.finalSale =
+      finalSale != null ? Number(finalSale) : computedFinalSale;
 
     await invoice.save();
     const updated = await Invoice.findById(invoice._id).populate("job");
@@ -196,6 +227,8 @@ router.put("/:id/extra-costs", auth, async (req, res) => {
     res.status(500).json({ error: "Failed to update invoice extra costs" });
   }
 });
+
+// ================= DELETE =================
 
 // DELETE /api/invoices/:id  (protected)
 router.delete("/:id", auth, async (req, res) => {
@@ -210,6 +243,8 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
+// ================= PDF STREAM =================
+
 // GET /api/invoices/:id/pdf  (protected) – stream PDF
 router.get("/:id/pdf", auth, async (req, res) => {
   try {
@@ -218,22 +253,13 @@ router.get("/:id/pdf", auth, async (req, res) => {
 
     const job = invoice.job || null;
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename=invoice-${invoice.invoiceNumber || invoice._id}.pdf`
-    );
-
-    // generate un-piped doc
-    const doc = generateInvoiceDoc(invoice, job);
-
-    // pipe and end
-    doc.pipe(res);
-    doc.end();
-    // errors will be logged by pdf util if thrown
+    // delegate to util (sets headers and streams)
+    streamInvoicePDF(invoice, job, res);
   } catch (err) {
     console.error("PDF route error:", err);
-    if (!res.headersSent) return res.status(500).json({ error: "Failed to generate PDF" });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: "Failed to generate PDF" });
+    }
     res.end();
   }
 });
