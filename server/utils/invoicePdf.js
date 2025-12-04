@@ -12,7 +12,8 @@ function formatWithCurrency(num, currency = "BHD") {
   return `${formatAmount(num)} ${currency}`;
 }
 
-function amountToWordsBHD(amount) {
+// amount in words – supports BHD (fils) and INR (paise)
+function amountToWords(amount, currency = "BHD") {
   if (!isFinite(amount)) amount = 0;
 
   const small = [
@@ -25,16 +26,40 @@ function amountToWordsBHD(amount) {
   function toWords(n) {
     n = Math.floor(n);
     if (n < 20) return small[n];
-    if (n < 100) return tens[Math.floor(n/10)] + (n % 10 ? " "+small[n%10] : "");
-    if (n < 1000) return small[Math.floor(n / 100)] + " hundred" + (n % 100 ? " " + toWords(n % 100) : "");
-    if (n < 1000000) return toWords(Math.floor(n/1000)) + " thousand" + (n % 1000 ? " " + toWords(n % 1000) : "");
+    if (n < 100) {
+      return tens[Math.floor(n / 10)] + (n % 10 ? " " + small[n % 10] : "");
+    }
+    if (n < 1000) {
+      return (
+        small[Math.floor(n / 100)] +
+        " hundred" +
+        (n % 100 ? " " + toWords(n % 100) : "")
+      );
+    }
+    if (n < 1000000) {
+      return (
+        toWords(Math.floor(n / 1000)) +
+        " thousand" +
+        (n % 1000 ? " " + toWords(n % 1000) : "")
+      );
+    }
     return String(n);
   }
 
   const whole = Math.floor(amount);
-  const fils = Math.round((amount - whole) * 1000);
+  const minor = Math.round((amount - whole) * 1000); // 3 decimals
 
-  return `${toWords(whole)} BHD ${fils > 0 ? toWords(fils) + " fils" : "zero fils"}`;
+  const isINR = (currency || "").toUpperCase() === "INR";
+  const mainLabel = isINR ? "INR" : "BHD";
+  const minorLabel = isINR ? "paise" : "fils";
+
+  const mainPart = toWords(whole);
+  const minorPart = minor > 0 ? `${toWords(minor)} ${minorLabel}` : `zero ${minorLabel}`;
+
+  // Capitalize first letter
+  const capMain = mainPart.charAt(0).toUpperCase() + mainPart.slice(1);
+
+  return `${capMain} ${mainLabel} ${minorPart}`;
 }
 
 // ---- MAIN PDF GENERATOR ----
@@ -45,13 +70,16 @@ function generateInvoicePDF(invoice, job, stream) {
   const currency = invoice.currency || "BHD";
   const jobCost = job?.cost ?? 0;
   const createdAt = invoice.createdAt ? new Date(invoice.createdAt) : new Date();
+  const countryRaw = (invoice.country || job?.country || "").toLowerCase();
+  const isIndia =
+    countryRaw.includes("india") || countryRaw.includes("bharat") || countryRaw === "in";
 
   // ===========================
-  // 1️⃣  LOAD LOGO
+  // 1️⃣  LOGO
   // ===========================
-  const logoPath = path.join(__dirname, "..", "assets", "logo.png"); // <-- EDIT THIS IF NEEDED
+  // change file name here if different (e.g. "wr-logo.png")
+  const logoPath = path.join(__dirname, "..", "assets", "logo.png");
 
-  // Draw logo on LEFT
   try {
     doc.image(logoPath, 40, 30, { width: 80 });
   } catch (err) {
@@ -64,21 +92,18 @@ function generateInvoicePDF(invoice, job, stream) {
   // ===========================
   doc
     .fontSize(13)
-    .fillColor("#800080")
-    .text("WELL REACH", 140, 65, { width: 260 });
-    doc
-    .fontSize(13)
-    .fillColor("#FFA500")
-    .text("LOGISTICS", 140, 85, { width: 260 });
-  // doc
-  //   .fontSize(9)
-  //   .fillColor("#6b7280")
-  //   .text(
-  //     "Office #2, Building 1698, Block 608, Road 845,\nWadiyan, Sitra, Kingdom of Bahrain.",
-  //     140,
-  //     55,
-  //     { width: 260 }
-  //   );
+    .fillColor("#0f172a")
+    .text("WELL REACH LOGISTICS SERVICES", 140, 35, { width: 260 });
+
+  doc
+    .fontSize(9)
+    .fillColor("#6b7280")
+    .text(
+      "Office #2, Building 1698, Block 608, Road 845,\nWadiyan, Sitra, Kingdom of Bahrain.",
+      140,
+      55,
+      { width: 260 }
+    );
 
   // ===========================
   // 3️⃣  TAX INVOICE (RIGHT)
@@ -94,11 +119,13 @@ function generateInvoicePDF(invoice, job, stream) {
     .fontSize(9)
     .fillColor("#4b5563")
     .text(`Invoice Number: ${invoice.invoiceNumber}`, rightX, 55, { width: 150 })
-    .text(`Invoice Date: ${createdAt.toLocaleDateString("en-GB")}`, rightX, 68, {
-      width: 150,
-    });
+    .text(
+      `Invoice Date: ${createdAt.toLocaleDateString("en-GB")}`,
+      rightX,
+      68,
+      { width: 150 }
+    );
 
-  // (client mobile optional)
   if (invoice.clientMobile) {
     doc.text(`Mobile: ${invoice.clientMobile}`, rightX, 82, { width: 150 });
   }
@@ -126,14 +153,14 @@ function generateInvoicePDF(invoice, job, stream) {
   doc.fontSize(9).fillColor("#4b5563");
 
   addrLines.forEach((line) => {
-    doc.text(line ?? "", 40, y);
+    if (!line) return;
+    doc.text(line, 40, y);
     y += 12;
   });
 
   // ===========================
   // 5️⃣  ITEM TABLE
   // ===========================
-
   y += 16;
 
   const tableLeft = 40;
@@ -159,14 +186,18 @@ function generateInvoicePDF(invoice, job, stream) {
       width: col.disc,
       align: "right",
     })
-    .text("VAT", tableLeft + col.i + col.name + col.qty + col.unit + col.disc + 5, y + 5, {
-      width: col.vat,
-      align: "right",
-    })
-    .text("Total", tableLeft + col.i + col.name + col.qty + col.unit + col.disc + col.vat + 5, y + 5, {
-      width: col.total,
-      align: "right",
-    });
+    .text(
+      "VAT",
+      tableLeft + col.i + col.name + col.qty + col.unit + col.disc + 5,
+      y + 5,
+      { width: col.vat, align: "right" }
+    )
+    .text(
+      "Total",
+      tableLeft + col.i + col.name + col.qty + col.unit + col.disc + col.vat + 5,
+      y + 5,
+      { width: col.total, align: "right" }
+    );
 
   // ITEM ROWS
   y += 25;
@@ -187,11 +218,12 @@ function generateInvoicePDF(invoice, job, stream) {
   }
 
   (invoice.extraCosts || []).forEach((item) => {
+    if (!item) return;
     const amt = Number(item.amount || 0);
     if (amt <= 0) return;
 
     lineItems.push({
-      name: item.label,
+      name: item.label || "Additional charge",
       qty: 1,
       unit: amt,
       disc: 0,
@@ -236,7 +268,6 @@ function generateInvoicePDF(invoice, job, stream) {
   // ===========================
   // 6️⃣  TOTALS + WORDS
   // ===========================
-
   const rawTotal = lineItems.reduce((s, li) => s + li.total, 0);
   const finalSale = invoice.finalSale ?? rawTotal;
   const paid = invoice.paidAmount ?? 0;
@@ -247,7 +278,11 @@ function generateInvoicePDF(invoice, job, stream) {
   doc
     .fontSize(9)
     .fillColor("#111827")
-    .text("Amount In Words: " + amountToWordsBHD(finalSale), 40, y);
+    .text(
+      "Amount In Words: " + amountToWords(finalSale, currency),
+      40,
+      y
+    );
 
   const totalsX = 340;
   const ty = y - 10;
@@ -268,27 +303,47 @@ function generateInvoicePDF(invoice, job, stream) {
   });
   doc.text(formatWithCurrency(balance, currency), totalsX + 130, ty + 28, {
     width: 70,
-    align: "right",
-  });
-
+    align: "right" });
+  
   // ===========================
-  // 7️⃣  BANK DETAILS
+  // 7️⃣  BANK DETAILS (Bahrain vs India)
   // ===========================
   const bankY = ty + 80;
+
+  const title = isIndia
+    ? "Please make the payment to our Indian bank account:"
+    : "Please make the payment to our bank account:";
+
+  // ⚠️ EDIT THESE LINES to your real INDIAN account details
+  const indianBankLines = [
+    "Bank: State Bank of India",
+    "Account: 000000000000",
+    "IFSC: SBIN0000000",
+    "Branch: Your Branch Name",
+  ];
+
+  const bahrainBankLines = [
+    "Bank: Kuwait Finance House B.S.C. (c)",
+    "Account: 0009451698001",
+    "IBAN: BH36AUBB00009451698001",
+    "SWIFT: AUBBBHBM",
+  ];
+
+  const bankLines = isIndia ? indianBankLines : bahrainBankLines;
 
   doc
     .fontSize(9)
     .fillColor("#111827")
-    .text("Please make the payment to our bank account:", 40, bankY);
+    .text(title, 40, bankY);
 
-  doc
-    .text("Bank: Kuwait Finance House B.S.C.(c)", 40, bankY + 16)
-    .text("Account: 0009451698001", 40, bankY + 30)
-    .text("IBAN: BH36AUBB00009451698001", 40, bankY + 44)
-    .text("SWIFT: AUBBBHBM", 40, bankY + 58);
+  bankLines.forEach((line, idx) => {
+    doc.text(line, 40, bankY + 16 + idx * 14);
+  });
 
   // Footer
-  doc.fontSize(8).fillColor("#9ca3af").text("Page 1 of 1", 40, 800, { align: "right" });
+  doc.fontSize(8).fillColor("#9ca3af").text("Page 1 of 1", 40, 800, {
+    align: "right",
+  });
 
   doc.end();
 }
@@ -304,7 +359,11 @@ function streamInvoicePDF(invoice, job, res) {
     generateInvoicePDF(invoice, job, res);
   } catch (err) {
     console.error("PDF ERROR:", err);
-    if (!res.headersSent) res.status(500).json({ error: "Failed to generate PDF" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to generate PDF" });
+    } else {
+      res.end();
+    }
   }
 }
 
