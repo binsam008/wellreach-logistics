@@ -7,6 +7,31 @@ const { streamInvoicePDF } = require("../utils/invoicePdf");
 
 const router = express.Router();
 
+// Generate next invoice number like WR-2025-0004
+async function generateInvoiceNumber() {
+  const year = new Date().getFullYear();
+  const prefix = `WR-${year}-`;
+
+  // Find the invoice with the largest number for this year
+  const lastInvoice = await Invoice.findOne({
+    invoiceNumber: { $regex: `^${prefix}` },
+  })
+    .sort({ invoiceNumber: -1 })
+    .lean();
+
+  let nextNumber = 1;
+
+  if (lastInvoice && lastInvoice.invoiceNumber) {
+    const suffix = lastInvoice.invoiceNumber.slice(prefix.length); // "0003"
+    const parsed = parseInt(suffix, 10);
+    if (!isNaN(parsed)) {
+      nextNumber = parsed + 1;
+    }
+  }
+
+  return `${prefix}${String(nextNumber).padStart(4, "0")}`;
+}
+
 function deriveTaxAndCurrencyFromCountry(country = "") {
   const c = String(country || "").toLowerCase();
   if (c.includes("india")) return { taxPercent: 18, currency: "INR" };
@@ -86,12 +111,12 @@ router.get("/:id/full", auth, async (req, res) => {
 router.post("/from-job/:jobId", auth, async (req, res) => {
   try {
     const job = await Job.findById(req.params.jobId);
-    if (!job) return res.status(404).json({ error: "Job not found" });
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
 
-    const count = await Invoice.countDocuments();
-    const invoiceNumber = `WR-${new Date().getFullYear()}-${String(
-      count + 1
-    ).padStart(4, "0")}`;
+    // use robust generator instead of countDocuments
+    const invoiceNumber = await generateInvoiceNumber();
 
     // Standard extra cost rows (pre-populated)
     const standardExtras = [
@@ -106,27 +131,49 @@ router.post("/from-job/:jobId", auth, async (req, res) => {
       job.country || ""
     );
 
-    const invoice = await Invoice.create({
+    const invoiceData = {
       invoiceNumber,
       job: job._id,
       clientName: job.clientName || "Walk-in Customer",
       clientAddress: job.routeTo || "",
+      clientMobile: job.clientMobile || "",
       baseCost: job.cost || 0,
       finalCost: job.cost || 0,
-      finalSale: job.sale || 0,
+      finalSale: job.sale || job.cost || 0,
       extraCosts: standardExtras,
-      currency: currency,
+      currency,
       paidAmount: 0,
-      status: "billed",
+      status: "billed", // must match enum in Invoice model
       discount: 0,
       taxPercent,
       country: job.country || "",
-    });
+    };
+
+    const invoice = new Invoice(invoiceData);
+    await invoice.save();
 
     res.status(201).json(invoice);
   } catch (err) {
-    console.error("Create invoice from job error:", err.message, err.stack);
-    res.status(500).json({ error: "Failed to create invoice" });
+    console.error("Create invoice from job error:", err);
+
+    // handle validation & duplicate invoiceNumber more nicely
+    if (err.name === "ValidationError") {
+      return res.status(400).json({
+        error: "Invoice validation failed",
+        details: err.errors,
+      });
+    }
+    if (err.code === 11000) {
+      return res.status(409).json({
+        error: "Invoice number already exists",
+        keyValue: err.keyValue,
+      });
+    }
+
+    res.status(500).json({
+      error: "Failed to create invoice",
+      details: err.message,
+    });
   }
 });
 

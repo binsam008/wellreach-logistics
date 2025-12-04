@@ -1,133 +1,311 @@
 // server/utils/invoicePdf.js
 const PDFDocument = require("pdfkit");
+const path = require("path");
 
-function formatDate(d) {
-  try {
-    if (!d) return "";
-    const date = d instanceof Date ? d : new Date(d);
-    return date.toISOString().slice(0, 10);
-  } catch {
-    return "";
-  }
+// ---- helpers ----
+function formatAmount(num, decimals = 3) {
+  if (num == null || !isFinite(num)) num = 0;
+  return Number(num).toFixed(decimals);
 }
 
-/**
- * Stream an invoice PDF directly to the response.
- * This function is called from the invoices route.
- *
- * @param {Object} invoice - Invoice mongoose document
- * @param {Object|null} job - Populated Job document (or null)
- * @param {Object} res - Express response
- */
-function streamInvoicePDF(invoice, job, res) {
-  const doc = new PDFDocument({ size: "A4", margin: 50 });
+function formatWithCurrency(num, currency = "BHD") {
+  return `${formatAmount(num)} ${currency}`;
+}
 
-  // HEADERS
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader(
-    "Content-Disposition",
-    `inline; filename=invoice-${invoice.invoiceNumber || invoice._id}.pdf`
-  );
+function amountToWordsBHD(amount) {
+  if (!isFinite(amount)) amount = 0;
 
-  // Pipe PDF to response
-  doc.pipe(res);
+  const small = [
+    "zero","one","two","three","four","five","six","seven","eight","nine",
+    "ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen",
+    "seventeen","eighteen","nineteen"
+  ];
+  const tens = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
 
-  // ================= HEADER =================
-  doc.fontSize(20).text("INVOICE", { align: "right" });
-  doc.moveDown();
+  function toWords(n) {
+    n = Math.floor(n);
+    if (n < 20) return small[n];
+    if (n < 100) return tens[Math.floor(n/10)] + (n % 10 ? " "+small[n%10] : "");
+    if (n < 1000) return small[Math.floor(n / 100)] + " hundred" + (n % 100 ? " " + toWords(n % 100) : "");
+    if (n < 1000000) return toWords(Math.floor(n/1000)) + " thousand" + (n % 1000 ? " " + toWords(n % 1000) : "");
+    return String(n);
+  }
 
-  doc.fontSize(12).text(`Invoice No: ${invoice.invoiceNumber || invoice._id}`);
-  doc.text(`Date: ${formatDate(invoice.issuedAt || invoice.createdAt || Date.now())}`);
-  doc.moveDown();
+  const whole = Math.floor(amount);
+  const fils = Math.round((amount - whole) * 1000);
 
-  // Company block (customize as you like)
+  return `${toWords(whole)} BHD ${fils > 0 ? toWords(fils) + " fils" : "zero fils"}`;
+}
+
+// ---- MAIN PDF GENERATOR ----
+function generateInvoicePDF(invoice, job, stream) {
+  const doc = new PDFDocument({ size: "A4", margin: 40 });
+  doc.pipe(stream);
+
+  const currency = invoice.currency || "BHD";
+  const jobCost = job?.cost ?? 0;
+  const createdAt = invoice.createdAt ? new Date(invoice.createdAt) : new Date();
+
+  // ===========================
+  // 1️⃣  LOAD LOGO
+  // ===========================
+  const logoPath = path.join(__dirname, "..", "assets", "logo.png"); // <-- EDIT THIS IF NEEDED
+
+  // Draw logo on LEFT
+  try {
+    doc.image(logoPath, 40, 30, { width: 80 });
+  } catch (err) {
+    console.error("Logo not found:", err.message);
+    doc.fontSize(14).text("WELL REACH LOGISTICS", 40, 40);
+  }
+
+  // ===========================
+  // 2️⃣  COMPANY DETAILS (MIDDLE)
+  // ===========================
   doc
-    .fontSize(14)
-    .text("Wellreach Logistics WLL", { align: "left" })
-    .fontSize(10)
-    .text("Kingdom of Bahrain")
-    .moveDown();
+    .fontSize(13)
+    .fillColor("#800080")
+    .text("WELL REACH", 140, 65, { width: 260 });
+    doc
+    .fontSize(13)
+    .fillColor("#FFA500")
+    .text("LOGISTICS", 140, 85, { width: 260 });
+  // doc
+  //   .fontSize(9)
+  //   .fillColor("#6b7280")
+  //   .text(
+  //     "Office #2, Building 1698, Block 608, Road 845,\nWadiyan, Sitra, Kingdom of Bahrain.",
+  //     140,
+  //     55,
+  //     { width: 260 }
+  //   );
 
-  // ================= CUSTOMER / JOB INFO =================
-  doc.fontSize(12).text("Bill To:", { underline: true });
-  doc.text(invoice.clientName || job?.clientName || "Walk-in Customer");
-  if (invoice.clientAddress || job?.routeTo) {
-    doc.text(invoice.clientAddress || job?.routeTo);
-  }
-  doc.moveDown();
+  // ===========================
+  // 3️⃣  TAX INVOICE (RIGHT)
+  // ===========================
+  const rightX = 420;
 
-  if (job) {
-    doc.text(`Job No: ${job.jobNumber || ""}`);
-    doc.text(`From: ${job.routeFrom || job.routeFromLocation || ""}`);
-    doc.text(`To: ${job.routeTo || job.routeToLocation || ""}`);
-    if (job.vehicleNumber) doc.text(`Vehicle: ${job.vehicleNumber}`);
-    doc.moveDown();
-  }
+  doc
+    .fontSize(12)
+    .fillColor("#0f172a")
+    .text("TAX INVOICE", rightX, 35, { width: 150, align: "left" });
 
-  // ================= CHARGES / ITEMS =================
-  doc.fontSize(12).text("Charges / Items:", { underline: true });
-
-  // If you have itemized lines, render them
-  if (Array.isArray(invoice.items) && invoice.items.length > 0) {
-    invoice.items.forEach((item) => {
-      const desc = item.description || "";
-      const qty = item.qty || 1;
-      const rate = item.rate || 0;
-      const amount = item.amount || qty * rate;
-      doc.text(`${desc} — ${qty} x ${rate} = ${amount}`);
+  doc
+    .fontSize(9)
+    .fillColor("#4b5563")
+    .text(`Invoice Number: ${invoice.invoiceNumber}`, rightX, 55, { width: 150 })
+    .text(`Invoice Date: ${createdAt.toLocaleDateString("en-GB")}`, rightX, 68, {
+      width: 150,
     });
-    doc.moveDown();
+
+  // (client mobile optional)
+  if (invoice.clientMobile) {
+    doc.text(`Mobile: ${invoice.clientMobile}`, rightX, 82, { width: 150 });
   }
 
-  // Extra costs summary (if available)
-  if (Array.isArray(invoice.extraCosts) && invoice.extraCosts.length > 0) {
-    doc.moveDown().text("Extra Costs:", { underline: true });
-    invoice.extraCosts.forEach((e) => {
-      doc.text(`${e.label || ""}: ${e.amount || 0}`);
-    });
-    doc.moveDown();
-  }
+  // ===========================
+  // 4️⃣  BILLING ADDRESS
+  // ===========================
+  let y = 120;
 
-  // ================= TOTALS =================
-  const baseCost = Number(invoice.baseCost || 0);
-  const extrasSum = Array.isArray(invoice.extraCosts)
-    ? invoice.extraCosts.reduce((s, e) => s + Number(e.amount || 0), 0)
-    : 0;
+  doc
+    .fontSize(11)
+    .fillColor("#0f172a")
+    .text("Billing Address", 40, y);
 
-  const discount = Number(invoice.discount || 0);
-  const taxPercent = Number(invoice.taxPercent || 0);
+  y += 16;
 
-  const subTotal = Number((baseCost + extrasSum).toFixed(3));
-  const taxable = Math.max(0, subTotal - discount);
-  const taxAmount = Number(((taxable * taxPercent) / 100).toFixed(3));
-  const computedTotal = Number((taxable + taxAmount).toFixed(3));
-  const grandTotal =
-    invoice.finalSale != null ? Number(invoice.finalSale) : computedTotal;
-
-  doc.moveDown();
-  doc.text(`Subtotal: ${subTotal}`);
-  doc.text(`Discount: ${discount}`);
-  doc.text(`Tax (${taxPercent}%): ${taxAmount}`);
-  doc.moveDown();
-  doc.fontSize(14).text(`Grand Total: ${grandTotal}`, { underline: true });
-
-  // Paid & balance
-  const paidAmount = Number(invoice.paidAmount || 0);
-  const balance = Number((grandTotal - paidAmount).toFixed(3));
-  doc.moveDown();
-  doc.fontSize(12).text(`Paid: ${paidAmount}`);
-  doc.text(`Balance: ${balance}`);
-
-  // ================= FOOTER =================
-  doc.moveDown().moveDown();
   doc
     .fontSize(10)
-    .text(
-      "Thank you for choosing Wellreach Logistics.",
-      { align: "center" }
-    );
+    .fillColor("#111827")
+    .text(invoice.clientName || job?.clientName || "", 40, y);
+
+  y += 14;
+
+  const addrLines = invoice.clientAddress?.split("\n") || [job?.routeTo || ""];
+  doc.fontSize(9).fillColor("#4b5563");
+
+  addrLines.forEach((line) => {
+    doc.text(line ?? "", 40, y);
+    y += 12;
+  });
+
+  // ===========================
+  // 5️⃣  ITEM TABLE
+  // ===========================
+
+  y += 16;
+
+  const tableLeft = 40;
+  const col = { i: 25, name: 170, qty: 50, unit: 70, disc: 60, vat: 40, total: 70 };
+
+  // Header background
+  doc.rect(tableLeft, y, 515, 20).fill("#f3f4f6");
+
+  doc
+    .fillColor("#374151")
+    .fontSize(9)
+    .text("#", tableLeft + 5, y + 5, { width: col.i })
+    .text("Name", tableLeft + col.i + 5, y + 5, { width: col.name })
+    .text("Qty", tableLeft + col.i + col.name + 5, y + 5, {
+      width: col.qty,
+      align: "center",
+    })
+    .text("Unit", tableLeft + col.i + col.name + col.qty + 5, y + 5, {
+      width: col.unit,
+      align: "right",
+    })
+    .text("Disc", tableLeft + col.i + col.name + col.qty + col.unit + 5, y + 5, {
+      width: col.disc,
+      align: "right",
+    })
+    .text("VAT", tableLeft + col.i + col.name + col.qty + col.unit + col.disc + 5, y + 5, {
+      width: col.vat,
+      align: "right",
+    })
+    .text("Total", tableLeft + col.i + col.name + col.qty + col.unit + col.disc + col.vat + 5, y + 5, {
+      width: col.total,
+      align: "right",
+    });
+
+  // ITEM ROWS
+  y += 25;
+  doc.moveTo(tableLeft, y).lineTo(tableLeft + 515, y).stroke("#e5e7eb");
+
+  const lineItems = [];
+
+  const baseAmount = invoice.baseCost ?? jobCost;
+  if (baseAmount > 0) {
+    lineItems.push({
+      name: "Transport service charges",
+      qty: 1,
+      unit: baseAmount,
+      disc: 0,
+      vat: 0,
+      total: baseAmount,
+    });
+  }
+
+  (invoice.extraCosts || []).forEach((item) => {
+    const amt = Number(item.amount || 0);
+    if (amt <= 0) return;
+
+    lineItems.push({
+      name: item.label,
+      qty: 1,
+      unit: amt,
+      disc: 0,
+      vat: 0,
+      total: amt,
+    });
+  });
+
+  doc.fontSize(9).fillColor("#111827");
+
+  lineItems.forEach((li, idx) => {
+    y += 6;
+    const rowY = y;
+
+    doc.text(String(idx + 1), tableLeft + 5, rowY, { width: col.i });
+    doc.text(li.name, tableLeft + col.i + 5, rowY, { width: col.name });
+    doc.text(li.qty, tableLeft + col.i + col.name + 5, rowY, {
+      width: col.qty,
+      align: "center",
+    });
+    doc.text(formatAmount(li.unit), tableLeft + col.i + col.name + col.qty + 5, rowY, {
+      width: col.unit,
+      align: "right",
+    });
+    doc.text("0.000", tableLeft + col.i + col.name + col.qty + col.unit + 5, rowY, {
+      width: col.disc,
+      align: "right",
+    });
+    doc.text("0.000", tableLeft + col.i + col.name + col.qty + col.unit + col.disc + 5, rowY, {
+      width: col.vat,
+      align: "right",
+    });
+    doc.text(formatAmount(li.total), tableLeft + col.i + col.name + col.qty + col.unit + col.disc + col.vat + 5, rowY, {
+      width: col.total,
+      align: "right",
+    });
+
+    y += 18;
+    doc.moveTo(tableLeft, y).lineTo(tableLeft + 515, y).stroke("#f3f4f6");
+  });
+
+  // ===========================
+  // 6️⃣  TOTALS + WORDS
+  // ===========================
+
+  const rawTotal = lineItems.reduce((s, li) => s + li.total, 0);
+  const finalSale = invoice.finalSale ?? rawTotal;
+  const paid = invoice.paidAmount ?? 0;
+  const balance = finalSale - paid;
+
+  y += 20;
+
+  doc
+    .fontSize(9)
+    .fillColor("#111827")
+    .text("Amount In Words: " + amountToWordsBHD(finalSale), 40, y);
+
+  const totalsX = 340;
+  const ty = y - 10;
+
+  doc.fillColor("#4b5563").fontSize(9);
+  doc.text("Total", totalsX, ty, { width: 120, align: "right" });
+  doc.text("Paid", totalsX, ty + 14, { width: 120, align: "right" });
+  doc.text("Balance", totalsX, ty + 28, { width: 120, align: "right" });
+
+  doc.fillColor("#111827");
+  doc.text(formatWithCurrency(finalSale, currency), totalsX + 130, ty, {
+    width: 70,
+    align: "right",
+  });
+  doc.text(formatWithCurrency(paid, currency), totalsX + 130, ty + 14, {
+    width: 70,
+    align: "right",
+  });
+  doc.text(formatWithCurrency(balance, currency), totalsX + 130, ty + 28, {
+    width: 70,
+    align: "right",
+  });
+
+  // ===========================
+  // 7️⃣  BANK DETAILS
+  // ===========================
+  const bankY = ty + 80;
+
+  doc
+    .fontSize(9)
+    .fillColor("#111827")
+    .text("Please make the payment to our bank account:", 40, bankY);
+
+  doc
+    .text("Bank: Kuwait Finance House B.S.C.(c)", 40, bankY + 16)
+    .text("Account: 0009451698001", 40, bankY + 30)
+    .text("IBAN: BH36AUBB00009451698001", 40, bankY + 44)
+    .text("SWIFT: AUBBBHBM", 40, bankY + 58);
+
+  // Footer
+  doc.fontSize(8).fillColor("#9ca3af").text("Page 1 of 1", 40, 800, { align: "right" });
 
   doc.end();
 }
 
-module.exports = { streamInvoicePDF };
+// STREAM WRAPPER
+function streamInvoicePDF(invoice, job, res) {
+  try {
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename=invoice-${invoice.invoiceNumber || invoice._id}.pdf`
+    );
+    generateInvoicePDF(invoice, job, res);
+  } catch (err) {
+    console.error("PDF ERROR:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to generate PDF" });
+  }
+}
+
+module.exports = { generateInvoicePDF, streamInvoicePDF };
