@@ -17,17 +17,47 @@ function amountToWords(amount, currency = "BHD") {
   if (!isFinite(amount)) amount = 0;
 
   const small = [
-    "zero","one","two","three","four","five","six","seven","eight","nine",
-    "ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen",
-    "seventeen","eighteen","nineteen"
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
   ];
-  const tens = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
+  const tens = [
+    "",
+    "",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety",
+  ];
 
   function toWords(n) {
     n = Math.floor(n);
     if (n < 20) return small[n];
     if (n < 100) {
-      return tens[Math.floor(n / 10)] + (n % 10 ? " " + small[n % 10] : "");
+      return (
+        tens[Math.floor(n / 10)] + (n % 10 ? " " + small[n % 10] : "")
+      );
     }
     if (n < 1000) {
       return (
@@ -54,7 +84,8 @@ function amountToWords(amount, currency = "BHD") {
   const minorLabel = isINR ? "paise" : "fils";
 
   const mainPart = toWords(whole);
-  const minorPart = minor > 0 ? `${toWords(minor)} ${minorLabel}` : `zero ${minorLabel}`;
+  const minorPart =
+    minor > 0 ? `${toWords(minor)} ${minorLabel}` : `zero ${minorLabel}`;
 
   // Capitalize first letter
   const capMain = mainPart.charAt(0).toUpperCase() + mainPart.slice(1);
@@ -69,15 +100,21 @@ function generateInvoicePDF(invoice, job, stream) {
 
   const currency = invoice.currency || "BHD";
   const jobCost = job?.cost ?? 0;
-  const createdAt = invoice.createdAt ? new Date(invoice.createdAt) : new Date();
+  const createdAt = invoice.createdAt
+    ? new Date(invoice.createdAt)
+    : new Date();
   const countryRaw = (invoice.country || job?.country || "").toLowerCase();
   const isIndia =
-    countryRaw.includes("india") || countryRaw.includes("bharat") || countryRaw === "in";
+    countryRaw.includes("india") ||
+    countryRaw.includes("bharat") ||
+    countryRaw === "in";
+
+  // Short tax label: GST for India, VAT for Bahrain
+  const taxLabelShort = isIndia ? "GST" : "VAT";
 
   // ===========================
   // 1️⃣  LOGO
   // ===========================
-  // change file name here if different (e.g. "wr-logo.png")
   const logoPath = path.join(__dirname, "..", "assets", "logo.png");
 
   try {
@@ -90,20 +127,26 @@ function generateInvoicePDF(invoice, job, stream) {
   // ===========================
   // 2️⃣  COMPANY DETAILS (MIDDLE)
   // ===========================
-  doc
-    .fontSize(13)
-    .fillColor("#0f172a")
-    .text("WELL REACH LOGISTICS SERVICES", 140, 35, { width: 260 });
+  doc.fontSize(13).fillColor("#0f172a").text(
+    "WELL REACH LOGISTICS SERVICES",
+    140,
+    35,
+    { width: 260 }
+  );
 
-  doc
-    .fontSize(9)
-    .fillColor("#6b7280")
-    .text(
-      "Office #2, Building 1698, Block 608, Road 845,\nWadiyan, Sitra, Kingdom of Bahrain.",
-      140,
-      55,
-      { width: 260 }
-    );
+  // 👉 For Bahrain: show Bahrain address
+  // 👉 For India: NO Bahrain address (as you requested)
+  if (!isIndia) {
+    doc
+      .fontSize(9)
+      .fillColor("#6b7280")
+      .text(
+        "Office #2, Building 1698, Block 608, Road 845,\nWadiyan, Sitra, Kingdom of Bahrain.",
+        140,
+        55,
+        { width: 260 }
+      );
+  }
 
   // ===========================
   // 3️⃣  TAX INVOICE (RIGHT)
@@ -118,7 +161,9 @@ function generateInvoicePDF(invoice, job, stream) {
   doc
     .fontSize(9)
     .fillColor("#4b5563")
-    .text(`Invoice Number: ${invoice.invoiceNumber}`, rightX, 55, { width: 150 })
+    .text(`Invoice Number: ${invoice.invoiceNumber}`, rightX, 55, {
+      width: 150,
+    })
     .text(
       `Invoice Date: ${createdAt.toLocaleDateString("en-GB")}`,
       rightX,
@@ -135,10 +180,7 @@ function generateInvoicePDF(invoice, job, stream) {
   // ===========================
   let y = 120;
 
-  doc
-    .fontSize(11)
-    .fillColor("#0f172a")
-    .text("Billing Address", 40, y);
+  doc.fontSize(11).fillColor("#0f172a").text("Billing Address", 40, y);
 
   y += 16;
 
@@ -164,7 +206,15 @@ function generateInvoicePDF(invoice, job, stream) {
   y += 16;
 
   const tableLeft = 40;
-  const col = { i: 25, name: 170, qty: 50, unit: 70, disc: 60, vat: 40, total: 70 };
+  const col = {
+    i: 25,
+    name: 170,
+    qty: 50,
+    unit: 70,
+    disc: 60,
+    vat: 40,
+    total: 70,
+  };
 
   // Header background
   doc.rect(tableLeft, y, 515, 20).fill("#f3f4f6");
@@ -186,15 +236,23 @@ function generateInvoicePDF(invoice, job, stream) {
       width: col.disc,
       align: "right",
     })
+    // 🔁 here we change header from fixed "VAT" to dynamic "VAT" / "GST"
     .text(
-      "VAT",
+      taxLabelShort,
       tableLeft + col.i + col.name + col.qty + col.unit + col.disc + 5,
       y + 5,
       { width: col.vat, align: "right" }
     )
     .text(
       "Total",
-      tableLeft + col.i + col.name + col.qty + col.unit + col.disc + col.vat + 5,
+      tableLeft +
+        col.i +
+        col.name +
+        col.qty +
+        col.unit +
+        col.disc +
+        col.vat +
+        5,
       y + 5,
       { width: col.total, align: "right" }
     );
@@ -244,32 +302,81 @@ function generateInvoicePDF(invoice, job, stream) {
       width: col.qty,
       align: "center",
     });
-    doc.text(formatAmount(li.unit), tableLeft + col.i + col.name + col.qty + 5, rowY, {
-      width: col.unit,
-      align: "right",
-    });
-    doc.text("0.000", tableLeft + col.i + col.name + col.qty + col.unit + 5, rowY, {
-      width: col.disc,
-      align: "right",
-    });
-    doc.text("0.000", tableLeft + col.i + col.name + col.qty + col.unit + col.disc + 5, rowY, {
-      width: col.vat,
-      align: "right",
-    });
-    doc.text(formatAmount(li.total), tableLeft + col.i + col.name + col.qty + col.unit + col.disc + col.vat + 5, rowY, {
-      width: col.total,
-      align: "right",
-    });
+    doc.text(
+      formatAmount(li.unit),
+      tableLeft + col.i + col.name + col.qty + 5,
+      rowY,
+      {
+        width: col.unit,
+        align: "right",
+      }
+    );
+    doc.text(
+      "0.000",
+      tableLeft + col.i + col.name + col.qty + col.unit + 5,
+      rowY,
+      {
+        width: col.disc,
+        align: "right",
+      }
+    );
+    // we’re not splitting tax per line, so show 0 here as before
+    doc.text(
+      "0.000",
+      tableLeft +
+        col.i +
+        col.name +
+        col.qty +
+        col.unit +
+        col.disc +
+        5,
+      rowY,
+      {
+        width: col.vat,
+        align: "right",
+      }
+    );
+    doc.text(
+      formatAmount(li.total),
+      tableLeft +
+        col.i +
+        col.name +
+        col.qty +
+        col.unit +
+        col.disc +
+        col.vat +
+        5,
+      rowY,
+      {
+        width: col.total,
+        align: "right",
+      }
+    );
 
     y += 18;
     doc.moveTo(tableLeft, y).lineTo(tableLeft + 515, y).stroke("#f3f4f6");
   });
 
   // ===========================
-  // 6️⃣  TOTALS + WORDS
+  // 6️⃣  TOTALS + TAX (VAT/GST) + WORDS
   // ===========================
   const rawTotal = lineItems.reduce((s, li) => s + li.total, 0);
-  const finalSale = invoice.finalSale ?? rawTotal;
+
+  // Try to read tax percent / amount if present; fall back safely
+  const taxPercent =
+    Number(invoice.taxPercent ?? invoice.taxRate ?? 0) || 0;
+
+  // If invoice.taxAmount is provided, use it; else compute from percent
+  const computedTaxAmount = (rawTotal * taxPercent) / 100;
+  const taxAmount =
+    invoice.taxAmount != null ? Number(invoice.taxAmount) : computedTaxAmount;
+
+  // Final sale = provided value OR subtotal + tax
+  const finalSale =
+    invoice.finalSale != null
+      ? Number(invoice.finalSale)
+      : rawTotal + (taxAmount || 0);
+
   const paid = invoice.paidAmount ?? 0;
   const balance = finalSale - paid;
 
@@ -278,37 +385,51 @@ function generateInvoicePDF(invoice, job, stream) {
   doc
     .fontSize(9)
     .fillColor("#111827")
-    .text(
-      "Amount In Words: " + amountToWords(finalSale, currency),
-      40,
-      y
-    );
+    .text("Amount In Words: " + amountToWords(finalSale, currency), 40, y);
 
   const totalsX = 340;
   const ty = y - 10;
 
+  // labels
   doc.fillColor("#4b5563").fontSize(9);
-  doc.text("Total", totalsX, ty, { width: 120, align: "right" });
-  doc.text("Paid", totalsX, ty + 14, { width: 120, align: "right" });
-  doc.text("Balance", totalsX, ty + 28, { width: 120, align: "right" });
+  doc.text("Subtotal", totalsX, ty, { width: 120, align: "right" });
+  doc.text(
+    `${taxLabelShort} (${taxPercent.toFixed(2)}%)`,
+    totalsX,
+    ty + 14,
+    { width: 120, align: "right" }
+  );
+  doc.text("Total", totalsX, ty + 28, { width: 120, align: "right" });
+  doc.text("Paid", totalsX, ty + 42, { width: 120, align: "right" });
+  doc.text("Balance", totalsX, ty + 56, { width: 120, align: "right" });
 
+  // values
   doc.fillColor("#111827");
-  doc.text(formatWithCurrency(finalSale, currency), totalsX + 130, ty, {
+  doc.text(formatWithCurrency(rawTotal, currency), totalsX + 130, ty, {
     width: 70,
     align: "right",
   });
-  doc.text(formatWithCurrency(paid, currency), totalsX + 130, ty + 14, {
+  doc.text(formatWithCurrency(taxAmount || 0, currency), totalsX + 130, ty + 14, {
     width: 70,
     align: "right",
   });
-  doc.text(formatWithCurrency(balance, currency), totalsX + 130, ty + 28, {
+  doc.text(formatWithCurrency(finalSale, currency), totalsX + 130, ty + 28, {
     width: 70,
-    align: "right" });
-  
+    align: "right",
+  });
+  doc.text(formatWithCurrency(paid, currency), totalsX + 130, ty + 42, {
+    width: 70,
+    align: "right",
+  });
+  doc.text(formatWithCurrency(balance, currency), totalsX + 130, ty + 56, {
+    width: 70,
+    align: "right",
+  });
+
   // ===========================
   // 7️⃣  BANK DETAILS (Bahrain vs India)
   // ===========================
-  const bankY = ty + 80;
+  const bankY = ty + 90;
 
   const title = isIndia
     ? "Please make the payment to our Indian bank account:"
@@ -331,10 +452,7 @@ function generateInvoicePDF(invoice, job, stream) {
 
   const bankLines = isIndia ? indianBankLines : bahrainBankLines;
 
-  doc
-    .fontSize(9)
-    .fillColor("#111827")
-    .text(title, 40, bankY);
+  doc.fontSize(9).fillColor("#111827").text(title, 40, bankY);
 
   bankLines.forEach((line, idx) => {
     doc.text(line, 40, bankY + 16 + idx * 14);

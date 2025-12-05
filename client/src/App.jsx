@@ -13,6 +13,7 @@ import { setToken } from "./api";
 import TrackPackage from "./pages/TrackPackage";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import RequireAuth from "./components/RequireAuth"; // ⬅️ add this
 
 function AppShell() {
   const location = useLocation();
@@ -27,11 +28,18 @@ function AppShell() {
           <Route path="/" element={<TrackPackage />} />
           <Route path="/track" element={<TrackPackage />} />
 
-          {/* Admin login */}
+          {/* Admin login (public) */}
           <Route path="/admin" element={<AdminLogin />} />
 
-          {/* Admin dashboard nested */}
-          <Route path="/admin/dashboard/*" element={<AdminDashboard />} />
+          {/* Admin dashboard (PROTECTED) */}
+          <Route
+            path="/admin/dashboard/*"
+            element={
+              <RequireAuth>
+                <AdminDashboard />
+              </RequireAuth>
+            }
+          />
 
           {/* 404 */}
           <Route
