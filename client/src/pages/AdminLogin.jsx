@@ -84,10 +84,10 @@ export default function AdminLogin() {
             </button>
           </form>
 
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center">
+          {/* <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center">
             Default username: <span className="font-medium">admin</span> ·
             Password from <code>ADMIN_PASS</code> in server <code>.env</code>
-          </p>
+          </p> */}
         </div>
       </div>
     </div>
